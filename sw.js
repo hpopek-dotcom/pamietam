@@ -1,7 +1,7 @@
 // Network-first for app files, falling back to cache when offline.
 // User data lives in IndexedDB and is never touched here.
 
-const CACHE = 'pamietam-shell-v2';
+const CACHE = 'pamietam-shell-v3';
 const SHELL = [
   './',
   './index.html',
