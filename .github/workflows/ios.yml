@@ -1,0 +1,84 @@
+# Builds an unsigned Pamietam.ipa for sideloading (Sideloadly signs it with the user's Apple ID).
+# The Xcode project is generated fresh by Capacitor on every run; iOS-specific settings are patched below.
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Capacitor
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare web assets
+        run: npm run build:www
+
+      - name: Generate iOS project
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Patch Info.plist and app icon
+        run: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string 'Pamiętam nagrywa notatki głosowe, które wypowiadasz.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string 'Pamiętam zamienia Twoje nagrania na tekst.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST"
+          for f in ios/App/App/Assets.xcassets/AppIcon.appiconset/*.png; do cp icons/icon-1024.png "$f"; done
+          plutil -p "$PLIST" | grep -E 'Usage|CFBundleDisplayName'
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/derived \
+            MARKETING_VERSION=0.1.${{ github.run_number }} \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tail -n 40
+
+      - name: Package .ipa
+        run: |
+          APP=$(find build/derived/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -n 1)
+          test -n "$APP"
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          (cd build && zip -qry Pamietam.ipa Payload)
+          ls -lh build/Pamietam.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pamietam-ipa
+          path: build/Pamietam.ipa
+
+      - name: Publish to the ios-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-latest >/dev/null 2>&1 || \
+            gh release create ios-latest --prerelease --title "iOS — najnowszy build" --notes "Niepodpisany build do wgrania przez Sideloadly."
+          gh release upload ios-latest build/Pamietam.ipa --clobber
+          gh release edit ios-latest --notes "Niepodpisany build do wgrania przez Sideloadly. Build ${{ github.run_number }}, commit ${GITHUB_SHA::7}."

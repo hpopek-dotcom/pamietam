@@ -60,7 +60,8 @@ async function boot() {
   () => ({ el: h('section', { class: 'view' }, h('p', {}, 'Nie ma takiej strony. '), h('a', { href: '#/' }, 'Wróć')) }));
 
   navigator.storage?.persist?.().catch(() => {});
-  if ('serviceWorker' in navigator) {
+  // Inside the native app (Capacitor) files are bundled, so no service worker is needed.
+  if ('serviceWorker' in navigator && !window.Capacitor?.isNativePlatform?.()) {
     navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service worker', err));
   }
 }

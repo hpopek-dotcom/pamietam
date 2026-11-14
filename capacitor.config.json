@@ -1,0 +1,9 @@
+{
+  "appId": "pl.hpopek.pamietam",
+  "appName": "Pamiętam",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#16181c"
+  }
+}
